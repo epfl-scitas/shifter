@@ -1,4 +1,5 @@
 import hashlib
+import urlparse
 import httplib
 import ssl
 import json
@@ -39,6 +40,15 @@ if 'all_proxy' in os.environ:
     socks_host=socks_host.replace('//','')
     socks.set_default_proxy(socks.SOCKS5, socks_host,int(socks_port))
     socket.socket = socks.socksocket  #dont add ()!!!
+
+
+def needProxy(hostname):
+    if os.environ['no_proxy']:
+        domains = os.environ['no_proxy'].split(',')
+        ismatch = True in map(lambda x: hostname.endswith(x), domains)
+        return not ismatch
+    else:
+        return True
 
 
 def joseDecodeBase64(input):
@@ -152,26 +162,59 @@ class dockerv2Handle():
             self.authMethod = options['authMethod']
 
     def setupHttpConn(self, url, cacert=None):
-        (protocol, url) = url.split('://', 1)
-        location = None
+        target = urlparse.urlparse(url)
         conn = None
         port = 443
-        if (url.find('/') >= 0):
-            (server, location) = url.split('/', 1)
-        else:
-            server = url
-        if ':' in server:
-            (server, port) = server.split(':')
-        if protocol == 'http':
-            conn = httplib.HTTPConnection(server)
-        elif protocol == 'https':
+
+        if target.scheme == 'http':
+            if 'http_proxy' in os.environ and needProxy(target.hostname):
+                proxy = urlparse.urlparse(os.environ['http_proxy'])
+                conn = httplib.HTTPConnection(proxy.netloc)
+                conn.set_tunnel(
+                    target.hostname,
+                    target.port if target.port else 80
+                )
+            else:
+                conn = httplib.HTTPConnection(target.netloc)
+        elif target.scheme == 'https':
+            if 'https_proxy' in os.environ and needProxy(target.hostname):
+                proxy = urlparse.urlparse(os.environ['https_proxy'])
+                useproxy = True
             try:
                 sslContext = ssl.create_default_context()
                 if cacert is not None:
                     sslContext = ssl.create_default_context(cafile=cacert)
-                conn = httplib.HTTPSConnection(server, context=sslContext)
+                if useproxy:
+                    conn = httplib.HTTPSConnection(
+                        proxy.netloc,
+                        context=sslContext
+                    )
+                    conn.set_tunnel(
+                        target.hostname,
+                        target.port if target.port else 443
+                    )
+                else:
+                    conn = httplib.HTTPSConnection(
+                        target.netloc,
+                        context=sslContext
+                    )
             except AttributeError:
-                conn = httplib.HTTPSConnection(server, port, None, cacert)
+                if useproxy:
+                    conn = httplib.HTTPSConnection(
+                        proxy.netloc,
+                        key_file=None,
+                        cert_file=cacert
+                    )
+                    conn.set_tunnel(
+                        target.hostname,
+                        target.port if target.port else 443
+                    )
+                else:
+                    conn = httplib.HTTPSConnection(
+                        target.netloc,
+                        key_file=None,
+                        cert_file=cacert
+                    )
         else:
             print "Error, unknown protocol %s" % protocol
             return None
