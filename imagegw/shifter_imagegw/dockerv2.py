@@ -164,8 +164,6 @@ class dockerv2Handle():
     def setupHttpConn(self, url, cacert=None):
         target = urlparse.urlparse(url)
         conn = None
-        port = 443
-
         if target.scheme == 'http':
             if 'http_proxy' in os.environ and needProxy(target.hostname):
                 proxy = urlparse.urlparse(os.environ['http_proxy'])
