@@ -960,11 +960,13 @@ int shifterSpank_job_prolog(shifterSpank_config *ssconfig) {
         uid = (uid_t) strtol(uid_str, NULL, 10);
     } else {
         if (wrap_spank_get_uid(ssconfig, &uid) == ERROR) {
-            PROLOG_ERROR("FAILED to get job uid!", ERROR);
+            PROLOG_ERROR("FAILED to get user id (uid) for job!", ERROR);
         }
     }
-    if (uid <= 0) {
-        PROLOG_ERROR("Job uid is invalid!", ERROR);
+    if (uid < 0) {
+        PROLOG_ERROR("User id (uid) is invalid!", ERROR);
+    } else if (uid == 0) {
+        PROLOG_ERROR("Cannot run as root!", ERROR);
     }
 
     if (wrap_spank_get_gid(ssconfig, &gid) == ERROR) {
@@ -980,7 +982,7 @@ int shifterSpank_job_prolog(shifterSpank_config *ssconfig) {
             gid = result->pw_gid;
             _log(LOG_DEBUG, "shifter prolog: got gid from getpwuid_r: %s", username);
         } else {
-            PROLOG_ERROR("FAILED to get job gid!", ERROR);
+            PROLOG_ERROR("FAILED to get group id (gid) for job!", ERROR);
         }
     }
 
